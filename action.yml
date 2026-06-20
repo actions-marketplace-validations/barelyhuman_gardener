@@ -1,7 +1,7 @@
-name: Gardener
+name: "Gardener"
 description: Run Gardener maintenance on the checked-out repository
 branding:
-  icon: seedling
+  icon: box
   color: green
 inputs:
   focus:
