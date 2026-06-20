@@ -1,0 +1,88 @@
+name: Gardener
+description: Run Gardener maintenance on the checked-out repository
+branding:
+  icon: seedling
+  color: green
+inputs:
+  focus:
+    description: Focus area (general maintenance, tests, dependencies, docs, performance)
+    required: false
+    default: general maintenance
+  node-version:
+    description: Node.js version
+    required: false
+    default: '22'
+  working-directory:
+    description: Path to the repository root to tend (relative to workspace)
+    required: false
+    default: '.'
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v4
+      with:
+        node-version: ${{ inputs.node-version }}
+        cache: npm
+        cache-dependency-path: ${{ github.action_path }}/package-lock.json
+
+    - name: Install and build Gardener
+      shell: bash
+      working-directory: ${{ github.action_path }}
+      run: npm ci && npm run build
+
+    - name: Run Gardener
+      id: run
+      shell: bash
+      working-directory: ${{ github.action_path }}
+      env:
+        GARDENER_TARGET_ROOT: ${{ github.workspace }}/${{ inputs.working-directory }}
+        CLOUDFLARE_ACCOUNT_ID: ${{ env.CLOUDFLARE_ACCOUNT_ID }}
+        CLOUDFLARE_API_KEY: ${{ env.CLOUDFLARE_API_KEY }}
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        npx flue run garden --target node \
+          --root "${{ github.action_path }}" \
+          --payload "$(jq -n --arg focus "${{ inputs.focus }}" '{focus: $focus}')" \
+          > "$RUNNER_TEMP/gardener-result.json"
+
+    - name: Write job summary
+      shell: bash
+      run: |
+        jq -r '
+          "# Gardener report\n\n" +
+          "## Summary\n\n" + .summary + "\n\n" +
+          "## Findings\n\n" +
+          (if (.findings | length) == 0 then "_No findings._\n"
+           else ([.findings[] | "- **[\(.severity)]** \(.area)\n  \(.suggestion)"] | join("\n\n")) + "\n"
+           end) +
+          "\n## Actions taken\n\n" +
+          (if (.actions_taken | length) == 0 then "_None (read-only run)._"
+           else ([.actions_taken[] | "- " + .] | join("\n"))
+           end)
+        ' "$RUNNER_TEMP/gardener-result.json" >> "$GITHUB_STEP_SUMMARY"
+
+    - name: Prepare pull request body
+      shell: bash
+      run: |
+        jq -r '
+          "## Summary\n\n" + .summary + "\n\n" +
+          "## Findings\n\n" +
+          (if (.findings | length) == 0 then "_No findings._\n"
+           else ([.findings[] | "- **[\(.severity)]** \(.area)\n  \(.suggestion)"] | join("\n\n")) + "\n"
+           end) +
+          "\n## Actions taken\n\n" +
+          (if (.actions_taken | length) == 0 then "_None (read-only run)._"
+           else ([.actions_taken[] | "- " + .] | join("\n"))
+           end)
+        ' "$RUNNER_TEMP/gardener-result.json" > "$RUNNER_TEMP/gardener-pr-body.md"
+
+    - name: Create pull request
+      uses: peter-evans/create-pull-request@v6
+      with:
+        token: ${{ github.token }}
+        branch: gardener/run-${{ github.run_id }}
+        commit-message: 'chore: gardener maintenance (${{ inputs.focus }})'
+        title: 'chore: gardener maintenance (${{ inputs.focus }})'
+        body-path: ${{ runner.temp }}/gardener-pr-body.md
+        add-paths: |
+          ${{ inputs.working-directory }}
