@@ -30,7 +30,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      - uses: YOUR_ORG/gardener@v1
+      - uses: barelyhuman/gardener@v1
         with:
           focus: ${{ inputs.focus }}
         env:
@@ -38,7 +38,7 @@ jobs:
           CLOUDFLARE_API_KEY: ${{ secrets.CLOUDFLARE_API_KEY }}
 ```
 
-Replace `YOUR_ORG/gardener@v1` with your fork or organization. Pin to a release tag (`@v1`, `@v1.0.0`) rather than a branch.
+The action is published as `barelyhuman/gardener`. Pin to a release tag (`@v1`, `@v1.0.0`) rather than a branch.
 
 ## Secrets
 
